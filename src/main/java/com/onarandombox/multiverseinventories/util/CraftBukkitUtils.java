@@ -24,9 +24,12 @@ import net.minecraft.server.NBTTagLong;
 import net.minecraft.server.NBTTagShort;
 import net.minecraft.server.NBTTagString;
 
+import org.bukkit.craftbukkit.inventory.CraftItemStack;
+import org.bukkit.inventory.ItemStack;
 import org.json.simple.JSONObject;
 
 import com.onarandombox.multiverseinventories.api.DataStrings;
+import com.onarandombox.multiverseinventories.api.PlayerStats;
 
 /**
  * Helper class for dealing with some craftbukkit stuff, mostly nbt tags
@@ -414,6 +417,62 @@ public class CraftBukkitUtils {
         
         //Return the value
         return value;
+    }
+    
+    /**
+     * Gets a player's inventory through its extracted nbt data using the {@link #getPlayerDataJson(File file) getPlayerDataJson}
+     * method
+     * @param json
+     * @throws IllegalArgumentException
+     */
+    public static ItemStack[] getPlayerInventory(JSONObject json) throws IllegalArgumentException  {
+        ItemStack[] invContents = MinecraftTools.fillWithAir(new ItemStack[PlayerStats.INVENTORY_SIZE]);
+        if (!json.containsKey("Inventory;9;10")) {
+            return invContents;
+        }
+        Object rawJsonInventory = json.get("Inventory;9;10");
+        if (!(rawJsonInventory instanceof List)) {
+            throw new IllegalArgumentException("Inventory wasn't converted to json properly, failing horribly D:");
+        }
+        List JsonInventoryList = (List) json.get("Inventory;9;10");
+        for (Object element : JsonInventoryList) {
+            if (!(element instanceof JSONObject)) {
+                throw new IllegalArgumentException("Inventory wasn't converted to json properly, failing horribly D:");
+            }
+            JSONObject elementJson = (JSONObject) element;
+            if (!elementJson.containsKey("Slot;1") || !elementJson.containsKey("id;2") || !elementJson.containsKey("Count;1")) {
+                throw new IllegalArgumentException("Inventory element didn't contain an essential key: " + elementJson);
+            }
+            int index = ((Short) elementJson.get("Slot;1")).shortValue();
+            if (index <= 8)
+                index += 36;
+            else if (index == 100)
+                index = 8;
+            else if (index == 101)
+                index = 7;
+            else if (index == 102)
+                index = 6;
+            else if (index == 103)
+                index = 5;
+            else if (index >= 80 && index <= 83)
+                index -= 79;
+            if (!(index >= 9 && index <= 44)) {
+                continue;
+            }
+            index = index - 9;
+            net.minecraft.server.ItemStack NMSStack;
+            if (elementJson.containsKey("Damage;2")) {
+                 NMSStack = CraftItemStack.createNMSItemStack(new CraftItemStack(((Integer) elementJson.get("id;2")).intValue(), ((Integer) elementJson.get("Count;1")).intValue(), ((Short) elementJson.get("Damage;2")).shortValue()));
+            } else {
+                NMSStack = CraftItemStack.createNMSItemStack(new CraftItemStack(((Integer) elementJson.get("id;2")).intValue(), ((Integer) elementJson.get("Count;1")).intValue()));
+            }
+            if (elementJson.containsKey("tag;10") && elementJson.get("tag;10") instanceof JSONObject) {
+                NBTTagCompound compound = CraftBukkitUtils.jsonToNBTTagCompound((JSONObject) elementJson.get("tag;10"));
+                NMSStack.setTag(compound);
+            }
+            invContents[index] = new CraftItemStack(NMSStack);
+        }
+        return invContents;
     }
     
     /**
